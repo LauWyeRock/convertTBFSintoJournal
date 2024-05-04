@@ -11,6 +11,7 @@ def process_file(file_path, sheet_name, skip_rows, last_row_to_skip, column_name
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as temp_file:
         shutil.copyfileobj(file_path, temp_file)
         temp_file_path = temp_file.name
+
     excel_app = xw.App(visible=False)
     excel_book = None
     try:
@@ -36,6 +37,7 @@ def process_file(file_path, sheet_name, skip_rows, last_row_to_skip, column_name
     for col in data.columns[1:]:  
         data[col] = pd.to_numeric(data[col], errors='coerce')
     data.fillna(0, inplace=True)
+    data = data[(data['Account'] != "0")]
 
     return data
 
@@ -57,6 +59,9 @@ def main():
             dfs = [tb_data.set_index('Account'), bs_data.set_index('Account'), pl_data.set_index('Account')]
             combined_data = reduce(lambda left, right: pd.merge(left, right, on='Account', how='outer'), dfs).fillna(0).reset_index()
 
+
+            combined_data = combined_data[combined_data['Account'].astype(str) != '0']
+
             output_df = pd.DataFrame({
                 'Journal Reference': 'FYE2023 Conversion: Transfer Balance',
                 'Contact': None,
@@ -72,6 +77,7 @@ def main():
                 'P&L Amount': combined_data['P&L Amount']
             })
 
+            st.dataframe(output_df)
             csv = output_df.to_csv(index=False)
             st.download_button("Download CSV", csv, "financial_data.csv", "text/csv", key='download-csv')
         else:
