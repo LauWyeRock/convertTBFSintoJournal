@@ -1,4 +1,5 @@
+
+xlcalculator==0.2.0  # assuming you're using this version, check the latest or required
+openpyxl==2.6.2  # or another version compatible with your version of xlcalculator
 pandas
-xlwings
-openpyxl
 streamlit

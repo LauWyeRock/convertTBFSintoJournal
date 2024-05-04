@@ -1,10 +1,47 @@
 import pandas as pd
 from openpyxl import load_workbook
+from xlcalculator.model import ModelCompiler
+from xlcalculator.model import Model
+from xlcalculator.evaluator import Evaluator
 import streamlit as st
 from functools import reduce
-import xlwings as xw
 import tempfile
 import shutil
+
+# def process_file(file_path, sheet_name, skip_rows, last_row_to_skip, column_names=None):
+
+#     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as temp_file:
+#         shutil.copyfileobj(file_path, temp_file)
+#         temp_file_path = temp_file.name
+
+#     excel_app = xw.App(visible=False)
+#     excel_book = None
+#     try:
+#         excel_book = excel_app.books.open(temp_file_path)
+#         excel_book.save()
+#     finally:
+#         excel_book.close()
+#         excel_app.quit()
+
+#     wb = load_workbook(temp_file_path, data_only=True)
+#     ws = wb[sheet_name]
+
+#     rows = list(ws.iter_rows(values_only=True, min_row=skip_rows + 1, max_row=ws.max_row - last_row_to_skip))
+#     data = pd.DataFrame(rows, columns=column_names if column_names else None)
+
+#     if not column_names:
+#         header_row = data.iloc[0]  
+#         header_row[0] = 'Account' 
+#         data.columns = header_row
+#         data = data.iloc[1:]
+
+#     data.reset_index(drop=True, inplace=True)
+#     for col in data.columns[1:]:  
+#         data[col] = pd.to_numeric(data[col], errors='coerce')
+#     data.fillna(0, inplace=True)
+#     data = data[(data['Account'] != "0")]
+
+#     return data
 
 def process_file(file_path, sheet_name, skip_rows, last_row_to_skip, column_names=None):
 
@@ -12,35 +49,34 @@ def process_file(file_path, sheet_name, skip_rows, last_row_to_skip, column_name
         shutil.copyfileobj(file_path, temp_file)
         temp_file_path = temp_file.name
 
-    excel_app = xw.App(visible=False)
-    excel_book = None
-    try:
-        excel_book = excel_app.books.open(temp_file_path)
-        excel_book.save()
-    finally:
-        excel_book.close()
-        excel_app.quit()
+    compiler = ModelCompiler()
+    model = compiler.read_and_parse_archive(temp_file_path)
+    evaluator = Evaluator(model)
 
     wb = load_workbook(temp_file_path, data_only=True)
     ws = wb[sheet_name]
 
-    rows = list(ws.iter_rows(values_only=True, min_row=skip_rows + 1, max_row=ws.max_row - last_row_to_skip))
+    rows = []
+    for row in ws.iter_rows(min_row=skip_rows + 1, max_row=ws.max_row - last_row_to_skip):
+        evaluated_row = [evaluator.evaluate(f"{sheet_name}!{cell.coordinate}") if cell.value is None else cell.value for cell in row]
+        rows.append(evaluated_row)
+
     data = pd.DataFrame(rows, columns=column_names if column_names else None)
 
     if not column_names:
-        header_row = data.iloc[0]  
-        header_row[0] = 'Account' 
+        header_row = data.iloc[0]
+        header_row[0] = 'Account'
         data.columns = header_row
         data = data.iloc[1:]
 
+    data['Account'] = data['Account'].astype(str).str.strip()
     data.reset_index(drop=True, inplace=True)
-    for col in data.columns[1:]:  
+    for col in data.columns[1:]:
         data[col] = pd.to_numeric(data[col], errors='coerce')
     data.fillna(0, inplace=True)
     data = data[(data['Account'] != "0")]
 
     return data
-
 
 def main():
     st.title("Financial Data Processor")
@@ -61,6 +97,7 @@ def main():
 
 
             combined_data = combined_data[combined_data['Account'].astype(str) != '0']
+            combined_data['Account'] = combined_data['Account'].str.strip()
 
             output_df = pd.DataFrame({
                 'Journal Reference': 'FYE2023 Conversion: Transfer Balance',
