@@ -1,32 +1,47 @@
 import pandas as pd
 from openpyxl import load_workbook
 import streamlit as st
+import xlwings
 from functools import reduce
+import xlwings as xw
+from openpyxl import load_workbook
+import pandas as pd
+import tempfile
+import shutil
 
-def process_file(file, sheet_name, skip_rows, last_row_to_skip, column_names):
-    wb = load_workbook(file, data_only=True)
+def process_file(file_path, sheet_name, skip_rows, last_row_to_skip, column_names=None):
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as temp_file:
+        shutil.copyfileobj(file_path, temp_file)
+        temp_file_path = temp_file.name
+    excel_app = xw.App(visible=False)
+    excel_book = None
+    try:
+        excel_book = excel_app.books.open(temp_file_path)
+        excel_book.save()
+    finally:
+        excel_book.close()
+        excel_app.quit()
+
+    wb = load_workbook(temp_file_path, data_only=True)
     ws = wb[sheet_name]
 
-    data = pd.DataFrame(ws.values)
-    
-    if column_names:
-        data.columns = column_names
-    else:
-        header_row = data.iloc[skip_rows]
-        header_row[0] = 'Account'  
+    rows = list(ws.iter_rows(values_only=True, min_row=skip_rows + 1, max_row=ws.max_row - last_row_to_skip))
+    data = pd.DataFrame(rows, columns=column_names if column_names else None)
+
+    if not column_names:
+        header_row = data.iloc[0]  
+        header_row[0] = 'Account' 
         data.columns = header_row
-    
-    data = data.iloc[skip_rows + 1:]  
-    if last_row_to_skip:
-        data = data[:-last_row_to_skip]
+        data = data.iloc[1:]
 
     data.reset_index(drop=True, inplace=True)
-
     for col in data.columns[1:]:  
         data[col] = pd.to_numeric(data[col], errors='coerce')
     data.fillna(0, inplace=True)
 
     return data
+
 
 def main():
     st.title("Financial Data Processor")
