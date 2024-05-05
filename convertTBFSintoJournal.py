@@ -88,7 +88,14 @@ def main():
             dfs = [tb_data.set_index('Account'), bs_data.set_index('Account'), pl_data.set_index('Account')]
             combined_data = reduce(lambda left, right: pd.merge(left, right, on='Account', how='outer'), dfs).reset_index()
             combined_data['Account'] = combined_data['Account'].str.strip()
+
+            combined_data['Non_Null_Count'] = combined_data.count(axis=1)
+            combined_data = combined_data.sort_values(by='Non_Null_Count', ascending=False)
+            combined_data = combined_data.drop_duplicates(subset='Account', keep='first').reset_index(drop=True)
+            combined_data = combined_data.drop(columns='Non_Null_Count')
+
             combined_data = combined_data[(combined_data['Account'].astype(str) != '0') & (combined_data['Account'].notna()) & (combined_data['Account'].astype(str) != 'nan')]
+            combined_data = combined_data[~((combined_data[['TB Debit', 'TB Credit', 'BS Amount', 'P&L Amount']].isna() | (combined_data[['TB Debit', 'TB Credit', 'BS Amount', 'P&L Amount']] == 0)).sum(axis=1) == 4)]
 
 
             output_df = pd.DataFrame({
