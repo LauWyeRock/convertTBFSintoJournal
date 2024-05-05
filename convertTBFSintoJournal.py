@@ -1,12 +1,11 @@
 import pandas as pd
 from openpyxl import load_workbook
-from xlcalculator.model import ModelCompiler
-from xlcalculator.model import Model
-from xlcalculator.evaluator import Evaluator
 import streamlit as st
 from functools import reduce
 import tempfile
 import shutil
+
+
 
 # def process_file(file_path, sheet_name, skip_rows, last_row_to_skip, column_names=None):
 
@@ -44,37 +43,30 @@ import shutil
 #     return data
 
 def process_file(file_path, sheet_name, skip_rows, last_row_to_skip, column_names=None):
-
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as temp_file:
         shutil.copyfileobj(file_path, temp_file)
         temp_file_path = temp_file.name
 
-    compiler = ModelCompiler()
-    model = compiler.read_and_parse_archive(temp_file_path)
-    evaluator = Evaluator(model)
+    if column_names is None:
+        data = pd.read_excel(temp_file_path, sheet_name=sheet_name, 
+                             skiprows=skip_rows, 
+                             skipfooter=last_row_to_skip, 
+                             header=None)
+        data.columns = data.iloc[0]
+        data = data[1:]
+    else:
+        data = pd.read_excel(temp_file_path, sheet_name=sheet_name, 
+                             skiprows=skip_rows, 
+                             skipfooter=last_row_to_skip, 
+                             header=None, 
+                             names=column_names)
 
-    wb = load_workbook(temp_file_path, data_only=True)
-    ws = wb[sheet_name]
-
-    rows = []
-    for row in ws.iter_rows(min_row=skip_rows + 1, max_row=ws.max_row - last_row_to_skip):
-        evaluated_row = [evaluator.evaluate(f"{sheet_name}!{cell.coordinate}") if cell.value is None else cell.value for cell in row]
-        rows.append(evaluated_row)
-
-    data = pd.DataFrame(rows, columns=column_names if column_names else None)
-
-    if not column_names:
-        header_row = data.iloc[0]
-        header_row[0] = 'Account'
-        data.columns = header_row
-        data = data.iloc[1:]
-
-    data['Account'] = data['Account'].astype(str).str.strip()
     data.reset_index(drop=True, inplace=True)
-    for col in data.columns[1:]:
+    if 'Account' in data.columns: 
+        data['Account'] = data['Account'].astype(str).str.strip()
+        data = data[(data['Account'] != "0")]
+    for col in data.columns[1:]:  
         data[col] = pd.to_numeric(data[col], errors='coerce')
-    data.fillna(0, inplace=True)
-    data = data[(data['Account'] != "0")]
 
     return data
 
@@ -91,13 +83,13 @@ def main():
             bs_data = process_file(bs_file, 'Balance Sheet', 4, 1, ['Account', 'BS Amount'])
             pl_data = process_file(pl_file, 'Profit and Loss', 4, 1, ['Account', 'P&L Amount'])
 
+
             
             dfs = [tb_data.set_index('Account'), bs_data.set_index('Account'), pl_data.set_index('Account')]
-            combined_data = reduce(lambda left, right: pd.merge(left, right, on='Account', how='outer'), dfs).fillna(0).reset_index()
-
-
-            combined_data = combined_data[combined_data['Account'].astype(str) != '0']
+            combined_data = reduce(lambda left, right: pd.merge(left, right, on='Account', how='outer'), dfs).reset_index()
             combined_data['Account'] = combined_data['Account'].str.strip()
+            combined_data = combined_data[(combined_data['Account'].astype(str) != '0') & (combined_data['Account'].notna()) & (combined_data['Account'].astype(str) != 'nan')]
+
 
             output_df = pd.DataFrame({
                 'Journal Reference': 'FYE2023 Conversion: Transfer Balance',
