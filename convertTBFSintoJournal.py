@@ -84,7 +84,6 @@ def main():
             pl_data = process_file(pl_file, 'Profit and Loss', 4, 1, ['Account', 'P&L Amount'])
 
 
-            
             dfs = [tb_data.set_index('Account'), bs_data.set_index('Account'), pl_data.set_index('Account')]
             combined_data = reduce(lambda left, right: pd.merge(left, right, on='Account', how='outer'), dfs).reset_index()
             combined_data['Account'] = combined_data['Account'].str.strip()
@@ -97,20 +96,22 @@ def main():
             combined_data = combined_data[(combined_data['Account'].astype(str) != '0') & (combined_data['Account'].notna()) & (combined_data['Account'].astype(str) != 'nan')]
             combined_data = combined_data[~((combined_data[['TB Debit', 'TB Credit', 'BS Amount', 'P&L Amount']].isna() | (combined_data[['TB Debit', 'TB Credit', 'BS Amount', 'P&L Amount']] == 0)).sum(axis=1) == 4)]
 
+            combined_data[['Account Code', 'Account Name']] = combined_data['Account'].str.extract(r'(?:(\d+(?:\.\d+)*)\s+)?(.*)') 
 
             output_df = pd.DataFrame({
                 'Journal Reference': 'FYE2023 Conversion: Transfer Balance',
                 'Contact': None,
                 'Date': None,
-                'Account': combined_data['Account'],
+                'Account': combined_data['Account Name'],
                 'Description': None,
                 'Tax Included in Amount': None,
                 'Debit Amount': combined_data['TB Debit'],
                 'Credit Amount': combined_data['TB Credit'],
-                'TB Debit': combined_data['TB Debit'],
-                'TB Credit': combined_data['TB Credit'],
-                'BS Amount': combined_data['BS Amount'],
-                'P&L Amount': combined_data['P&L Amount']
+                'raw_account': combined_data['Account'],
+                'raw_TB-dedit': combined_data['TB Debit'],
+                'raw_TB-credit': combined_data['TB Credit'],
+                'raw_BS-amount': combined_data['BS Amount'],
+                'raw_P&L-amount': combined_data['P&L Amount']
             })
 
             st.dataframe(output_df)
